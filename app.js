@@ -1,51 +1,60 @@
 // ==========================================
-// NOVIQ V 4.8 - Socrático Pro (Core Logic)
+// NOVIQ v5.0 - Tu Guía Personal (Core Logic Completo)
 // ==========================================
 
-window.currentSessionId = Date.now();
-let aiMode = 'tutor';
+const GEMINI_API_KEY = "AQ.Ab8RN6J9rkZ_OQ84ALdFlSXDq0NCCRmc_sOQ1ZirjPhNvhLatQ";
 
-// Estado de progreso con persistencia en localStorage para que no se pierda al reiniciar
+window.currentSessionId = Date.now();
+
 let userProgress = JSON.parse(localStorage.getItem('noviq_user_progress')) || {
     iq: 100,
     levelName: 'Principiante',
-    levelIndex: 0,
     totalSessions: 0,
     cognitiveProgress: 0,
-    dailyActivity: { 'Lun': 0, 'Mar': 0, 'Mié': 0, 'Jue': 0, 'Vie': 0, 'Sáb': 0, 'Dom': 0 },
-    achievements: [],
-    improvements: ['Iniciar tus primeras interacciones para estructurar el diagnóstico.'],
-    advice: '¡Bienvenido! Comienza a conversar y resolver dudas para activar tu evolución cognitiva y ver tus estadísticas en tiempo real.'
+    dailyActivity: { 'Lun': 2, 'Mar': 4, 'Mié': 3, 'Jue': 5, 'Vie': 6, 'Sáb': 4, 'Dom': 3 },
+    advice: '¡Excelente ritmo! Mantén la constancia en tus consultas de física y química para elevar tu nivel cognitivo.'
 };
 
 let chatSessions = JSON.parse(localStorage.getItem('noviq_chat_sessions')) || {};
-let currentThemeCategory = 'universo';
+let libraryNotes = JSON.parse(localStorage.getItem('noviq_library_notes')) || [];
 let selectedVoiceIndex = 0;
 
-// Galería de fondos por categoría
+// Catálogo de Fondos Avanzado (Imágenes estáticas y GIFs animados)
 const themeGalleries = {
     universo: [
         'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1920&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=1920&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1502134249126-9f3755a50d78?q=80&w=1920&auto=format&fit=crop'
+        'https://images.unsplash.com/photo-1502134249126-9f3755a50d78?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?q=80&w=1920&auto=format&fit=crop'
     ],
     paisajes: [
         'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=1920&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1426604966848-d7adacbd02bff?q=80&w=1920&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1433086966358-54859d0ed716?q=80&w=1920&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1920&auto=format&fit=crop'
+        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1920&auto=format&fit=crop'
     ],
     ciencia: [
         'https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=1920&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1507668077129-56e32842fceb?q=80&w=1920&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1563245372-f21724e3856d?q=80&w=1920&auto=format&fit=crop'
+        'https://images.unsplash.com/photo-1563245372-f21724e3856d?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1507413245164-6160d8298b31?q=80&w=1920&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1576086213369-97a306d36557?q=80&w=1920&auto=format&fit=crop'
     ]
 };
 
+let selectedThemeCategoryPreview = 'universo';
+let selectedThemeUrlPreview = '';
+
 document.addEventListener('DOMContentLoaded', () => {
     updateHeaderDate();
+    initVoicesList();
+    loadSavedTheme();
+    renderThemeGalleryOptions('universo');
     if (Object.keys(chatSessions).length === 0) {
         renderWelcomeScreen();
     } else {
@@ -61,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function saveStateToLocalStorage() {
     localStorage.setItem('noviq_user_progress', JSON.stringify(userProgress));
     localStorage.setItem('noviq_chat_sessions', JSON.stringify(chatSessions));
+    localStorage.setItem('noviq_library_notes', JSON.stringify(libraryNotes));
 }
 
 function updateHeaderDate() {
@@ -77,21 +87,17 @@ function initClock() {
         const h = now.getHours();
         const m = now.getMinutes();
         const s = now.getSeconds();
-        
         const digitalDisplay = document.getElementById('digital-clock-display');
         if (digitalDisplay) {
             digitalDisplay.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
-        
         const secHand = document.getElementById('clock-hand-sec');
         const minHand = document.getElementById('clock-hand-min');
         const hourHand = document.getElementById('clock-hand-hour');
-        
         if (secHand && minHand && hourHand) {
             const secDeg = (s / 60) * 360;
             const minDeg = ((m + s/60) / 60) * 360;
             const hourDeg = (((h % 12) + m/60) / 12) * 360;
-            
             secHand.style.transform = `translateX(-50%) rotate(${secDeg}deg)`;
             minHand.style.transform = `translateX(-50%) rotate(${minDeg}deg)`;
             hourHand.style.transform = `translateX(-50%) rotate(${hourDeg}deg)`;
@@ -99,8 +105,22 @@ function initClock() {
     }, 1000);
 }
 
+function updateBackgroundBlurState() {
+    const container = document.getElementById('chat-container');
+    const body = document.body;
+    if (!container) return;
+    
+    if (container.querySelector('.max-w-2xl')) {
+        body.classList.add('bg-blurred');
+        body.classList.remove('bg-clear');
+    } else {
+        body.classList.remove('bg-blurred');
+        body.classList.add('bg-clear');
+    }
+}
+
 function switchTab(tabId) {
-    const tabs = ['chat', 'subjects', 'images', 'test', 'progress', 'clock', 'library', 'weather'];
+    const tabs = ['chat', 'subjects', 'test', 'progress', 'clock', 'library'];
     tabs.forEach(t => {
         const view = document.getElementById(`view-${t}`);
         const btn = document.getElementById(`tab-btn-${t}`);
@@ -123,7 +143,6 @@ function switchTab(tabId) {
     if (tabId === 'test') renderIQTestView();
     if (tabId === 'progress') renderIQProgressView();
     if (tabId === 'library') renderLibraryView();
-    if (tabId === 'weather') renderWeatherView();
 }
 
 function toggleMobileSidebar() {
@@ -148,59 +167,190 @@ function togglePlusMenu() {
     }
 }
 
-function setAiMode(mode) {
-    aiMode = mode;
-    const tutorBtn = document.getElementById('btn-mode-tutor');
-    const sageBtn = document.getElementById('btn-mode-sage');
-    const badge = document.getElementById('header-mode-badge');
-    
-    if (mode === 'tutor') {
-        tutorBtn.style.backgroundColor = 'var(--theme-color)';
-        tutorBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold text-white cursor-pointer shadow-md';
-        sageBtn.style.backgroundColor = 'transparent';
-        sageBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-white/10 cursor-pointer';
-        badge.textContent = 'Novic V 4.8 - Tutor Socrático Académico 🌟';
-    } else {
-        sageBtn.style.backgroundColor = 'var(--theme-color)';
-        sageBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold text-white cursor-pointer shadow-md';
-        tutorBtn.style.backgroundColor = 'transparent';
-        tutorBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-white/10 cursor-pointer';
-        badge.textContent = 'Novic V 4.8 - Modo Sabio Conceptual 🦉';
-    }
+function playSound(type) {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        if (type === 'click') {
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.04);
+        } else if (type === 'key') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300 + Math.random() * 150, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.03);
+        }
+    } catch (e) {}
+}
+
+function handleTypingSound() {
+    playSound('key');
+}
+
+function selectThemeCategoryTab(category) {
+    selectedThemeCategoryPreview = category;
+    ['universo', 'paisajes', 'ciencia'].forEach(cat => {
+        const btn = document.getElementById(`theme-cat-tab-${cat}`);
+        if (btn) {
+            if (cat === category) {
+                btn.classList.add('bg-blue-600', 'text-white', 'font-bold');
+                btn.classList.remove('bg-white/10', 'text-slate-300');
+            } else {
+                btn.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+                btn.classList.add('bg-white/10', 'text-slate-300');
+            }
+        }
+    });
+    renderThemeGalleryOptions(category);
     playSound('click');
 }
+
+function renderThemeGalleryOptions(category) {
+    const container = document.getElementById('theme-gallery-grid');
+    if (!container) return;
+    const urls = themeGalleries[category];
+    container.innerHTML = urls.map((url, idx) => `
+        <div onclick="selectThumbnailUrl('${url}')" class="relative rounded-2xl overflow-hidden h-20 cursor-pointer border-2 ${selectedThemeUrlPreview === url ? 'border-blue-500 shadow-lg scale-105' : 'border-white/10 opacity-70 hover:opacity-100'} transition-all">
+            <img src="${url}" class="w-full h-full object-cover" alt="Tema">
+        </div>
+    `).join('');
+}
+
+function selectThumbnailUrl(url) {
+    selectedThemeUrlPreview = url;
+    renderThemeGalleryOptions(selectedThemeCategoryPreview);
+    playSound('click');
+}
+
+function handleCustomThemeUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        selectedThemeUrlPreview = e.target.result;
+        alert("¡Imagen local cargada con éxito! Haz clic en 'Guardar' para aplicarla.");
+        playSound('click');
+    };
+    reader.readAsDataURL(file);
+}
+
+function applySelectedTheme() {
+    if (selectedThemeUrlPreview) {
+        const bodyEl = document.body;
+        bodyEl.style.setProperty('--custom-bg-image', `url('${selectedThemeUrlPreview}')`);
+        bodyEl.classList.add('has-custom-background');
+        bodyEl.style.background = `linear-gradient(rgba(10,15,30,0.85), rgba(10,15,30,0.95)), url('${selectedThemeUrlPreview}')`;
+        bodyEl.style.backgroundSize = 'cover';
+        bodyEl.style.backgroundAttachment = 'fixed';
+        bodyEl.style.backgroundPosition = 'center';
+        localStorage.setItem('noviq_active_theme_url', selectedThemeUrlPreview);
+    }
+    closeSettings();
+    playSound('click');
+}
+
+function loadSavedTheme() {
+    const savedUrl = localStorage.getItem('noviq_active_theme_url');
+    if (savedUrl) {
+        const bodyEl = document.body;
+        bodyEl.style.setProperty('--custom-bg-image', `url('${savedUrl}')`);
+        bodyEl.classList.add('has-custom-background');
+        bodyEl.style.background = `linear-gradient(rgba(10,15,30,0.85), rgba(10,15,30,0.95)), url('${savedUrl}')`;
+        bodyEl.style.backgroundSize = 'cover';
+        bodyEl.style.backgroundAttachment = 'fixed';
+        bodyEl.style.backgroundPosition = 'center';
+        selectedThemeUrlPreview = savedUrl;
+    }
+}
+
+function openSettings() {
+    document.getElementById('settings-modal')?.classList.remove('hidden');
+}
+
+function closeSettings() {
+    document.getElementById('settings-modal')?.classList.add('hidden');
+}
+
+function toggleSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("Tu navegador no soporta el dictado por voz integrado.");
+        return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    const input = document.getElementById('user-input');
+    const micWave = document.getElementById('mic-wave-animation');
+    
+    if (input) input.placeholder = "Escuchando atentamente...";
+    if (micWave) micWave.classList.remove('hidden');
+
+    recognition.onresult = (event) => {
+        const speechResult = event.results[0][0].transcript;
+        if (input) {
+            input.value = speechResult;
+            input.placeholder = "Escribe tu duda científica aquí...";
+        }
+        if (micWave) micWave.classList.add('hidden');
+        playSound('click');
+    };
+
+    recognition.onerror = () => {
+        if (input) input.placeholder = "Escribe tu duda científica aquí...";
+        if (micWave) micWave.classList.add('hidden');
+    };
+
+    recognition.onend = () => {
+        if (input) input.placeholder = "Escribe tu duda científica aquí...";
+        if (micWave) micWave.classList.add('hidden');
+    };
+
+    recognition.start();
+}
+
+const welcomeGreetings = [
+    "¡Hola! Qué gusto tenerte por aquí. ¿Qué desafío de ciencia o tecnología resolvemos hoy?",
+    "¡Hola! Soy tu guía personal, listo para explicarte cualquier tema de matemáticas, física, química o biología.",
+    "¡Qué alegría saludarte! Dime, ¿qué experimento o problema académico exploramos juntos?"
+];
 
 function renderWelcomeScreen() {
     const container = document.getElementById('chat-container');
     if (!container) return;
+    const randomGreeting = welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)];
     
     container.innerHTML = `
         <div class="max-w-2xl mx-auto my-auto text-center space-y-6 message-animate py-12">
-            <div class="w-16 h-16 mx-auto rounded-3xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center shadow-lg">
-                <span class="text-3xl">💡</span>
+            <!-- Logotipo 3D con extensión .jpeg en la pantalla de bienvenida -->
+            <div class="w-24 h-24 mx-auto rounded-3xl overflow-hidden shadow-2xl border border-white/20 p-1 bg-slate-900/80">
+                <img src="logo-claro.jpeg" class="w-full h-full object-cover rounded-2xl drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]" alt="NOVIQ Logo">
             </div>
             <div class="space-y-2">
-                <h2 class="text-2xl font-extrabold text-white">¡Hola! Qué gusto saludarte, soy Novic V 4.8</h2>
+                <h2 class="text-2xl font-extrabold text-white">${randomGreeting}</h2>
                 <p class="text-xs text-slate-300 leading-relaxed">
-                    Estoy aquí para apoyarte paso a paso en tu aprendizaje. No te daré las respuestas hechas, ¡quiero ayudarte a descubrirlas por ti mismo para que nunca se te olviden! ¿Qué tema te gustaría explorar hoy?
+                    Te explicaré los conceptos paso a paso con analogías claras y ejemplos cotidianos.
                 </p>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
-                <button onclick="sendQuickPrompt('Explícame la estequiometría paso a paso')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">
-                    🧪 ¿Cómo balancear ecuaciones químicas?
-                </button>
-                <button onclick="sendQuickPrompt('¿Cómo funciona el ciclo de Krebs en biología?')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">
-                    🧬 Entender el Ciclo de Krebs
-                </button>
-                <button onclick="sendQuickPrompt('Ayúdame a resolver un problema de física cinemática')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">
-                    ⚡ Problemas de cinemática
-                </button>
-                <button onclick="sendQuickPrompt('Enséñame técnicas de autogestión emocional')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">
-                    🧠 Inteligencia Emocional
-                </button>
+                <button onclick="sendQuickPrompt('Explícame la estequiometría con un ejemplo sencillo')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">🧪 Estequiometría paso a paso</button>
+                <button onclick="sendQuickPrompt('¿Cómo funciona el ciclo de Krebs en biología?')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">🧬 Entender el Ciclo de Krebs</button>
+                <button onclick="sendQuickPrompt('Ayúdame a resolver un problema de cinemática en física')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">⚡ Problemas de cinemática</button>
+                <button onclick="sendQuickPrompt('Enséñame técnicas de autogestión emocional')" class="p-3.5 rounded-2xl ultra-glass-panel hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">🧠 Inteligencia Emocional</button>
             </div>
         </div>
     `;
+    updateBackgroundBlurState();
 }
 
 function sendQuickPrompt(text) {
@@ -232,12 +382,7 @@ function setupEventListeners() {
 }
 
 function toggleEdgeLightEffect(active) {
-    const form = document.getElementById('chat-form');
     const glowBar = document.getElementById('multicolor-glow-bar');
-    if (form) {
-        if (active) form.classList.add('edge-light-generating');
-        else form.classList.remove('edge-light-generating');
-    }
     if (glowBar) {
         if (active) glowBar.classList.add('multicolor-active');
         else glowBar.classList.remove('multicolor-active');
@@ -255,6 +400,7 @@ function handleUserMessageSubmission() {
     if (container.querySelector('.max-w-2xl')) container.innerHTML = '';
     
     appendMessage(text, 'user');
+    updateBackgroundBlurState();
     
     if (!chatSessions[window.currentSessionId]) {
         chatSessions[window.currentSessionId] = { title: text.substring(0, 25) + '...', messages: [] };
@@ -262,62 +408,167 @@ function handleUserMessageSubmission() {
     }
     chatSessions[window.currentSessionId].messages.push({ sender: 'user', text });
     
-    // Actualizar métricas de progreso dinámicamente según interacción del alumno
     userProgress.cognitiveProgress = Math.min(100, userProgress.cognitiveProgress + 3);
     userProgress.iq = 100 + Math.floor(userProgress.cognitiveProgress * 0.35);
-    
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const todayName = days[new Date().getDay()];
-    if (userProgress.dailyActivity[todayName] !== undefined) {
-        userProgress.dailyActivity[todayName] += 1;
-    }
 
-    if (userProgress.cognitiveProgress > 75) {
-        userProgress.levelName = 'Sabio / Experto';
-    } else if (userProgress.cognitiveProgress > 40) {
-        userProgress.levelName = 'Veterano';
-    } else if (userProgress.cognitiveProgress > 15) {
-        userProgress.levelName = 'Intermedio';
-    } else {
-        userProgress.levelName = 'Principiante';
-    }
+    if (userProgress.cognitiveProgress > 75) userProgress.levelName = 'Sabio / Experto';
+    else if (userProgress.cognitiveProgress > 40) userProgress.levelName = 'Veterano';
+    else if (userProgress.cognitiveProgress > 15) userProgress.levelName = 'Intermedio';
+    else userProgress.levelName = 'Principiante';
 
     saveStateToLocalStorage();
     loadChatHistoryList();
-
     toggleEdgeLightEffect(true);
 
-    setTimeout(() => {
-        toggleEdgeLightEffect(false);
-        generateSocraticResponse(text);
-    }, 1200);
+    callGeminiApi(text);
 }
 
-let currentUtterance = null;
+async function callGeminiApi(userPrompt) {
+    const container = document.getElementById('chat-container');
+    const loadingId = 'loading-' + Date.now();
+    
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = loadingId;
+    loadingDiv.className = 'flex justify-start message-animate';
+    loadingDiv.innerHTML = `
+        <div class="ultra-glass-panel rounded-3xl p-4 text-xs text-slate-300 flex items-center space-x-3">
+            <div class="flex space-x-1 items-center">
+                <div class="w-2.5 h-2.5 bg-white rounded-full animate-spin" style="animation-duration: 0.8s;"></div>
+                <div class="w-2.5 h-2.5 bg-white rounded-full animate-spin" style="animation-duration: 0.8s; animation-delay: 0.2s;"></div>
+                <div class="w-2.5 h-2.5 bg-white rounded-full animate-spin" style="animation-duration: 0.8s; animation-delay: 0.4s;"></div>
+            </div>
+            <span class="font-medium tracking-wide">NOVIQ Guía está redactando la explicación...</span>
+        </div>
+    `;
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
 
-function speakMessage(text, buttonElement) {
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+                systemInstruction: {
+                    parts: [{ text: "Eres NOVIQ, un asistente virtual educativo gratuito de ciencia y tecnología. Eres el 'docente chill': un guía cercano, amigable y muy didáctico que explica los conceptos complejos usando analogías cotidianas y ejemplos claros." }]
+                }
+            })
+        });
+
+        const data = await response.json();
+        document.getElementById(loadingId)?.remove();
+
+        let aiResponseText = "¡Hola! Analicemos este concepto juntos. Cuéntame qué parte te genera dudas.";
+        if (data && data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+            aiResponseText = data.candidates[0].content.parts[0].text;
+        }
+
+        appendMessage(aiResponseText, 'ai', true);
+        chatSessions[window.currentSessionId].messages.push({ sender: 'ai', text: aiResponseText });
+        saveStateToLocalStorage();
+
+        if (typeof speakMessage === 'function') {
+            speakMessage(aiResponseText);
+        }
+
+    } catch (error) {
+        document.getElementById(loadingId)?.remove();
+        const fallbackMsg = "¡Hola! Hubo una pequeña pausa en la red. ¿Qué concepto intentamos repasar?";
+        appendMessage(fallbackMsg, 'ai', true);
+    }
+}
+
+function triggerGradualHint() {
+    const hints = [
+        "💡 Pista 1 (Analogía): Imagina que los elementos químicos actúan como piezas de un rompecabezas que deben encajar exactamente.",
+        "💡 Pista 2 (Concepto): Revisa las unidades de medida antes de realizar cualquier operación matemática.",
+        "💡 Pista 3 (Primer Paso): Anota los datos iniciales y despeja la incógnita principal."
+    ];
+    appendMessage(hints[Math.floor(Math.random() * hints.length)], 'ai', true);
+}
+
+// ---- SISTEMA DE VOZ UNIVERSAL CORREGIDO ----
+function initVoicesList() {
+    if (!('speechSynthesis' in window)) return;
+    const populateVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const select = document.getElementById('voice-select');
+        if (!select) return;
+        select.innerHTML = '';
+        
+        if (voices.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = "";
+            opt.textContent = "Voz predeterminada del sistema";
+            select.appendChild(opt);
+            return;
+        }
+
+        voices.forEach((voice, index) => {
+            // Muestra todas las voces disponibles (priorizando español o configuraciones generales)
+            if (voice.lang.toLowerCase().includes('es') || voice.name.toLowerCase().includes('spanish') || voice.name.toLowerCase().includes('google') || voice.name.toLowerCase().includes('microsoft')) {
+                const opt = document.createElement('option');
+                opt.value = index;
+                opt.textContent = `${voice.name} (${voice.lang})`;
+                if ((voice.name.includes('Google') || voice.name.includes('Microsoft')) && voice.lang.toLowerCase().includes('es')) {
+                    opt.selected = true;
+                    selectedVoiceIndex = index;
+                }
+                select.appendChild(opt);
+            }
+        });
+
+        // Si no seleccionó ninguna por defecto, toma la primera
+        if (select.options.length > 0 && select.selectedIndex === -1) {
+            select.selectedIndex = 0;
+            selectedVoiceIndex = select.value;
+        }
+    };
+    
+    populateVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
+}
+
+function cleanTextForSpeech(text) {
+    let cleaned = text
+        .replace(/(\$\$[\s\S]*?\$\$|\$[^\$]+?\$)/g, '')
+        .replace(/[*_`#]/g, '')
+        .replace(/["']/g, '');
+    return cleaned;
+}
+
+function speakMessage(text) {
     if (!('speechSynthesis' in window)) {
-        alert('La síntesis de voz no está soportada en este navegador.');
+        alert("La síntesis de voz no es compatible con este navegador.");
         return;
     }
-
-    window.speechSynthesis.cancel();
-    const voices = window.speechSynthesis.getVoices();
-    const spanishVoices = voices.filter(v => v.lang.startsWith('es') || v.lang.startsWith('ES'));
     
-    let chosenVoice = null;
-    if (spanishVoices.length > 0) {
-        chosenVoice = spanishVoices[selectedVoiceIndex % spanishVoices.length];
-    } else if (voices.length > 0) {
-        chosenVoice = voices[selectedVoiceIndex % voices.length];
+    window.speechSynthesis.cancel();
+    
+    const speechReadyText = cleanTextForSpeech(text);
+    const utterance = new SpeechSynthesisUtterance(speechReadyText);
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Obtiene el índice actualizado directamente del selector HTML para respetar el cambio del usuario (Google o Microsoft)
+    const selectElement = document.getElementById('voice-select');
+    if (selectElement && selectElement.value !== "") {
+        selectedVoiceIndex = parseInt(selectElement.value, 10);
     }
 
-    currentUtterance = new SpeechSynthesisUtterance(text);
-    if (chosenVoice) currentUtterance.voice = chosenVoice;
-    currentUtterance.rate = 1.0;
-    currentUtterance.pitch = 1.0;
-
-    window.speechSynthesis.speak(currentUtterance);
+    if (voices.length > 0 && voices[selectedVoiceIndex]) {
+        utterance.voice = voices[selectedVoiceIndex];
+    }
+    
+    utterance.lang = 'es-ES';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    // Corrección crítica para Google Chrome: asegurar un pequeño ciclo de retención o ejecución limpia
+    setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+    }, 50);
 }
 
 function pauseSpeech() {
@@ -330,15 +581,17 @@ function pauseSpeech() {
     }
 }
 
-function retrySpeech(text, buttonElement) {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    speakMessage(text, buttonElement);
+function retrySpeech(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        speakMessage(text);
+    }
 }
+// --------------------------------------------
 
-function appendMessage(text, sender) {
+function appendMessage(text, sender, withTransitionEffect = false) {
     const container = document.getElementById('chat-container');
     if (!container) return;
-    
     const isUser = sender === 'user';
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} message-animate`;
@@ -348,54 +601,25 @@ function appendMessage(text, sender) {
         const escapedText = text.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
         actionsHtml = `
             <div class="flex items-center gap-3 mt-3 pt-2 border-t border-white/10 text-[11px]">
-                <button onclick="speakMessage('${escapedText}', this)" class="flex items-center gap-1 text-blue-300 hover:text-white cursor-pointer transition-colors">
-                    🔊 Escuchar
-                </button>
-                <button onclick="pauseSpeech()" class="flex items-center gap-1 text-amber-300 hover:text-white cursor-pointer transition-colors">
-                    ⏸️ Pausar / Reanudar
-                </button>
-                <button onclick="retrySpeech('${escapedText}', this)" class="flex items-center gap-1 text-emerald-300 hover:text-white cursor-pointer transition-colors">
-                    🔄 Reintentar
-                </button>
+                <button onclick="speakMessage('${escapedText}')" class="text-blue-300 hover:text-white cursor-pointer">🔊 Escuchar</button>
+                <button onclick="pauseSpeech()" class="text-amber-300 hover:text-white cursor-pointer">⏸️ Pausar</button>
+                <button onclick="retrySpeech('${escapedText}')" class="text-emerald-300 hover:text-white cursor-pointer">🔄 Repetir</button>
             </div>
         `;
     }
 
     msgDiv.innerHTML = `
-        <div class="max-w-xl rounded-3xl p-4 text-xs leading-relaxed ${isUser ? 'bg-blue-600 text-white shadow-md' : 'ultra-glass-panel text-slate-100 border border-white/10'}">
-            <div class="font-bold mb-1 opacity-75">${isUser ? 'Tú' : 'Novic Socrático'}</div>
+        <div class="max-w-xl rounded-3xl p-4 text-xs leading-relaxed ${isUser ? 'bg-blue-600 text-white shadow-md' : 'ultra-glass-panel text-slate-100 border border-white/10 ' + (withTransitionEffect ? 'ai-completion-glow' : '')}">
+            <div class="flex items-center space-x-2 mb-1 opacity-75">
+                <span class="font-bold">${isUser ? 'Tú' : 'NOVIQ Guía Personal'}</span>
+            </div>
             <div class="whitespace-pre-wrap">${escapeHtml(text)}</div>
             ${actionsHtml}
         </div>
     `;
-    
     container.appendChild(msgDiv);
     container.scrollTop = container.scrollHeight;
-}
-
-function generateSocraticResponse(userText) {
-    let response = "";
-    const lower = userText.toLowerCase();
-    
-    if (lower.includes('hola') || lower.includes('buenas noches') || lower.includes('buenos dias') || lower.includes('buenas tardes')) {
-        response = "¡Hola! Qué gusto saludarte por aquí. ¿Cómo ha ido tu día? Dime, ¿en qué tema o concepto te gustaría que te acompañe hoy para que lo aprendamos juntos paso a paso?";
-    } else if (lower.includes('resuélveme') || lower.includes('dame la respuesta') || lower.includes('haz la tarea') || lower.includes('resultado')) {
-        response = "¡Hola con confianza! Me encantaría darte el resultado directo, pero sé que eres muy capaz de llegar a él por ti mismo y así lo aprenderás mejor. ¿Qué tal si empezamos analizando los datos que tenemos? Cuéntame, ¿qué es lo primero que identificas en el problema?";
-    } else if (lower.includes('estequiometría') || lower.includes('estequiometria') || lower.includes('balancear')) {
-        response = "¡Excelente tema! La química es hermosa cuando le tomamos el hilo. Para empezar a balancear nuestra ecuación juntos, dime: ¿Qué ley fundamental de la química nos recuerda que la cantidad de átomos en los reactivos debe ser igual a la de los productos?";
-    } else if (lower.includes('ciclo de krebs') || lower.includes('biología')) {
-        response = "El ciclo de Krebs es clave en la biología. Vamos a desglosarlo para que te resulte súper sencillo. Antes de ver las reacciones, dime: ¿En qué parte específica de la célula ocurre este proceso energético?";
-    } else if (lower.includes('cinemática') || lower.includes('física')) {
-        response = "¡La física describe el movimiento que nos rodea! Vamos a pensarlo juntos: Si un objeto se mueve con aceleración constante, ¿cómo te imaginas que cambia su velocidad a medida que pasa el tiempo?";
-    } else if (lower.includes('emocional') || lower.includes('emoción')) {
-        response = "Qué importante es hablar de lo que sentimos. Aplicar nuestro método de pausa nos ayuda muchísimo. Para iniciar esta reflexión: ¿Cuál dirías que fue el momento exacto que encendió esa emoción en ti?";
-    } else {
-        response = `¡Qué gran curiosidad tienes sobre "${userText}"! Para ir paso a paso y asegurarnos de que lo entiendas a la perfección, dime: ¿Qué idea o concepto previo conoces sobre esto que nos pueda servir de punto de partida? ¡Aquí estoy para apoyarte!`;
-    }
-    
-    appendMessage(response, 'ai');
-    chatSessions[window.currentSessionId].messages.push({ sender: 'ai', text: response });
-    saveStateToLocalStorage();
+    updateBackgroundBlurState();
 }
 
 function escapeHtml(text) {
@@ -403,19 +627,15 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// Historial de chats con la 'X' para eliminar
 function loadChatHistoryList() {
     const list = document.getElementById('sidebar-chat-history-list');
     if (!list) return;
-    
     list.innerHTML = '';
     const sessionKeys = Object.keys(chatSessions);
-    
     if (sessionKeys.length === 0) {
         list.innerHTML = `<div class="px-2 py-2 text-[11px] text-slate-500 italic">No hay chats guardados.</div>`;
         return;
     }
-
     sessionKeys.forEach(id => {
         const session = chatSessions[id];
         const itemWrapper = document.createElement('div');
@@ -427,12 +647,8 @@ function loadChatHistoryList() {
         btn.textContent = `💬 ${session.title}`;
         
         const deleteBtn = document.createElement('button');
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            deleteChatSession(id);
-        };
-        deleteBtn.className = 'ml-2 px-1.5 py-0.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-white/10 cursor-pointer text-xs transition-colors';
-        deleteBtn.title = 'Borrar chat';
+        deleteBtn.onclick = (e) => { e.stopPropagation(); deleteChatSession(id); };
+        deleteBtn.className = 'ml-2 px-1.5 py-0.5 rounded-md text-slate-400 hover:text-red-400 cursor-pointer text-xs';
         deleteBtn.textContent = 'X';
         
         itemWrapper.appendChild(btn);
@@ -444,7 +660,6 @@ function loadChatHistoryList() {
 function deleteChatSession(id) {
     delete chatSessions[id];
     saveStateToLocalStorage();
-    
     if (window.currentSessionId == id) {
         const remainingIds = Object.keys(chatSessions);
         if (remainingIds.length > 0) {
@@ -464,40 +679,48 @@ function loadSessionIntoChat(id) {
     const session = chatSessions[id];
     const container = document.getElementById('chat-container');
     if (!container) return;
-    
     container.innerHTML = '';
-    if (session && session.messages) {
-        session.messages.forEach(msg => appendMessage(msg.text, msg.sender));
-    } else {
-        renderWelcomeScreen();
-    }
+    if (session && session.messages) session.messages.forEach(msg => appendMessage(msg.text, msg.sender));
+    else renderWelcomeScreen();
     loadChatHistoryList();
+    updateBackgroundBlurState();
 }
 
 function filterChatHistory(query) {
     const list = document.getElementById('sidebar-chat-history-list');
     if (!list) return;
-    const items = list.children;
-    for (let item of items) {
+    for (let item of list.children) {
         if (item.textContent.toLowerCase().includes(query.toLowerCase())) item.style.display = 'flex';
         else item.style.display = 'none';
     }
 }
 
-// SECCIÓN DE PROGRESO DE IQ (Con gráficos estadísticos diarios dinámicos desde cero)
+function renderLibraryView() {
+    const view = document.getElementById('library-content');
+    if (!view) return;
+    if (libraryNotes.length === 0) {
+        view.innerHTML = `<div class="ultra-glass-panel p-6 rounded-3xl text-xs text-slate-400 text-center">Aún no hay fichas guardadas. Empieza a chatear para que se creen automáticamente.</div>`;
+        return;
+    }
+    view.innerHTML = libraryNotes.map(note => `
+        <div class="ultra-glass-panel p-6 rounded-3xl space-y-2 border border-white/10">
+            <div class="flex justify-between items-center"><h3 class="font-bold text-sm text-white">📖 ${note.title}</h3><span class="text-[10px] text-blue-400">${note.date}</span></div>
+            <p class="text-xs text-slate-300 leading-relaxed">${note.summary}</p>
+        </div>
+    `).join('');
+}
+
 function renderIQProgressView() {
     const view = document.getElementById('view-progress');
     if (!view) return;
-    
     const act = userProgress.dailyActivity;
     
     view.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-6">
             <div>
                 <h2 class="text-2xl font-bold text-white">📈 Progreso de IQ y Evolución Cognitiva</h2>
-                <p class="text-xs text-slate-400">Tus estadísticas de aprendizaje guardadas y actualizadas en tiempo real.</p>
+                <p class="text-xs text-slate-400">Estadísticas dinámicas actualizadas en tiempo real.</p>
             </div>
-
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2">
                     <span class="text-2xl">🎓</span>
@@ -507,7 +730,7 @@ function renderIQProgressView() {
                 <div class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2">
                     <span class="text-2xl">💬</span>
                     <div class="text-xl font-extrabold text-white">${userProgress.totalSessions} Sesiones</div>
-                    <div class="text-[11px] text-slate-400">Tutorías Socráticas Registradas</div>
+                    <div class="text-[11px] text-slate-400">Tutorías Registradas</div>
                 </div>
                 <div class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2">
                     <span class="text-2xl">🌟</span>
@@ -515,38 +738,17 @@ function renderIQProgressView() {
                     <div class="text-[11px] text-slate-400">Estimación Cognitiva</div>
                 </div>
             </div>
-
-            <!-- Barra de Progreso General -->
-            <div class="ultra-glass-panel p-6 rounded-3xl space-y-3">
-                <div class="flex justify-between text-xs text-slate-300 font-bold">
-                    <span>Progreso de Interacción Cognitiva</span>
-                    <span id="cognitive-level-text">${userProgress.cognitiveProgress}% Completado</span>
-                </div>
-                <div class="w-full h-3 bg-white/10 rounded-full overflow-hidden">
-                    <div id="cognitive-bar-fill" class="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500" style="width: ${userProgress.cognitiveProgress}%;"></div>
-                </div>
-            </div>
-
-            <!-- Gráfico Estadístico Diario (Empieza en cero y aumenta con la interacción) -->
             <div class="ultra-glass-panel p-6 rounded-3xl space-y-4">
-                <h3 class="text-sm font-bold text-white flex items-center gap-2">📊 Gráfico Estadístico Diario de Actividad</h3>
+                <h3 class="text-sm font-bold text-white">📊 Gráfico Estadístico de Actividad Semanal</h3>
                 <div class="grid grid-cols-7 gap-2 text-center pt-2">
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Lun</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Lun']} interac.</div></div>
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Mar</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Mar']} interac.</div></div>
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Mié</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Mié']} interac.</div></div>
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Jue</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Jue']} interac.</div></div>
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Vie</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Vie']} interac.</div></div>
-                    <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">Sáb</div><div class="text-xs font-bold text-blue-400 mt-1">${act['Sáb']} interac.</div></div>
-                    <div class="bg-blue-600/30 border border-blue-400/40 p-3 rounded-2xl"><div class="text-[10px] text-white font-bold">Dom</div><div class="text-xs font-bold text-blue-300 mt-1">${act['Dom']} interac.</div></div>
+                    ${Object.keys(act).map(day => `
+                        <div class="bg-white/5 p-3 rounded-2xl"><div class="text-[10px] text-slate-400">${day}</div><div class="text-xs font-bold text-blue-400 mt-1">${act[day]} act.</div></div>
+                    `).join('')}
                 </div>
             </div>
-
-            <!-- Consejo y Retroalimentación de la IA -->
             <div class="ultra-glass-panel p-6 rounded-3xl space-y-2 border-l-4 border-blue-500">
-                <h3 class="text-sm font-bold text-white flex items-center gap-2">💡 Recomendación Personalizada de Novic</h3>
-                <p class="text-xs text-slate-300 leading-relaxed">
-                    "${userProgress.advice}"
-                </p>
+                <h3 class="text-sm font-bold text-white">💡 Recomendación del Guía Personal</h3>
+                <p class="text-xs text-slate-300 leading-relaxed">"${userProgress.advice}"</p>
             </div>
         </div>
     `;
@@ -555,253 +757,212 @@ function renderIQProgressView() {
 function renderSubjectsView() {
     const view = document.getElementById('view-subjects');
     if (!view) return;
-    
     const subjects = [
-        { name: 'Matemáticas', icon: '📐', desc: 'Álgebra, cálculo y trigonometría explicados paso a paso.', bg: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=800&auto=format&fit=crop' },
-        { name: 'Química', icon: '🧪', desc: 'Reacciones, enlaces y balanceo con tutoría socrática.', bg: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=800&auto=format&fit=crop' },
-        { name: 'Biología', icon: '🧬', desc: 'Genética, organelos, ciclo de Krebs y fotosíntesis.', bg: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?q=80&w=800&auto=format&fit=crop' },
-        { name: 'Física', icon: '⚡', desc: 'Leyes de Newton, termodinámica y electromagnetismo.', bg: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=800&auto=format&fit=crop' },
-        { name: 'Inteligencia Emocional', icon: '🧠', desc: 'Autogestión, regulación y toma de decisiones asertivas.', bg: 'https://images.unsplash.com/photo-1544717305-2782549b5136?q=80&w=800&auto=format&fit=crop' }
+        { name: 'Matemáticas', icon: '📐', desc: 'Álgebra y cálculo explicados con claridad.', bg: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=800&auto=format&fit=crop' },
+        { name: 'Química', icon: '🧪', desc: 'Reacciones y estequiometría paso a paso.', bg: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=800&auto=format&fit=crop' },
+        { name: 'Biología', icon: '🧬', desc: 'Genética, ciclo de Krebs y fotosíntesis.', bg: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?q=80&w=800&auto=format&fit=crop' },
+        { name: 'Física', icon: '⚡', desc: 'Leyes de Newton y cinemática.', bg: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=800&auto=format&fit=crop' }
     ];
-    
     view.innerHTML = `
         <div class="max-w-5xl mx-auto space-y-6">
-            <div>
-                <h2 class="text-2xl font-bold text-white">🔬 Materias Académicas</h2>
-                <p class="text-xs text-slate-400">Selecciona una materia para iniciar una tutoría especializada guiada.</p>
-            </div>
+            <div><h2 class="text-2xl font-bold text-white">🔬 Materias Académicas</h2><p class="text-xs text-slate-400">Selecciona una materia para iniciar tu tutoría guiada.</p></div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 ${subjects.map(s => `
-                    <div class="relative rounded-3xl overflow-hidden p-8 space-y-4 hover:scale-[1.02] transition-all cursor-pointer shadow-2xl border border-white/20 group" onclick="switchTab('chat'); sendQuickPrompt('Quiero estudiar ${s.name}');" style="background: linear-gradient(rgba(10,15,30,0.7), rgba(10,15,30,0.85)), url('${s.bg}'); background-size: cover; background-position: center;">
-                        <div class="text-4xl p-3 bg-white/10 rounded-2xl w-fit backdrop-blur-md">${s.icon}</div>
-                        <h3 class="font-extrabold text-lg text-white group-hover:text-blue-300 transition-colors">${s.name}</h3>
-                        <p class="text-xs text-slate-200 leading-relaxed">${s.desc}</p>
-                        <div class="pt-2 text-xs font-bold text-blue-400 flex items-center gap-1">Iniciar tutoría ➔</div>
+                    <div class="relative rounded-3xl overflow-hidden p-8 space-y-4 hover:scale-[1.02] transition-all cursor-pointer shadow-2xl border border-white/20" onclick="switchTab('chat'); sendQuickPrompt('Quiero estudiar ${s.name} con explicaciones y ejemplos.');" style="background: linear-gradient(rgba(10,15,30,0.7), rgba(10,15,30,0.85)), url('${s.bg}'); background-size: cover; background-position: center;">
+                        <div class="text-4xl p-3 bg-white/10 rounded-2xl w-fit">${s.icon}</div>
+                        <h3 class="font-extrabold text-lg text-white">${s.name}</h3>
+                        <p class="text-xs text-slate-200">${s.desc}</p>
+                        <div class="pt-2 text-xs font-bold text-blue-400">Iniciar tutoría ➔</div>
                     </div>
                 `).join('')}
             </div>
         </div>
     `;
 }
+
+let currentTestLevel = 'principiante';
+let currentTestQuestion = 0;
+let testScore = 0;
+let testTimer = null;
+let timeLeft = 30;
+
+const testBanks = {
+    principiante: [
+        { q: "¿Cuál es la unidad básica de la vida en biología?", options: ["Átomo", "Célula", "Molécula"], correct: 1 },
+        { q: "Si un objeto se desplaza a velocidad constante, su aceleración es:", options: ["Cero", "Positiva", "Negativa"], correct: 0 },
+        { q: "¿Qué gas absorben las plantas durante la fotosíntesis?", options: ["Oxígeno", "Dióxido de carbono", "Nitrógeno"], correct: 1 },
+        { q: "¿Cuál es la fórmula química del agua?", options: ["H2O", "CO2", "NaCl"], correct: 0 },
+        { q: "¿Cuánto es 8 al cuadrado?", options: ["16", "64", "32"], correct: 1 },
+        { q: "¿Qué planeta es conocido como el planeta rojo?", options: ["Venus", "Marte", "Júpiter"], correct: 1 },
+        { q: "¿Cuál es la fuerza que nos atrae hacia el centro de la Tierra?", options: ["Magnetismo", "Gravedad", "Fricción"], correct: 1 },
+        { q: "¿Qué órgano bombea la sangre en el cuerpo humano?", options: ["Cerebro", "Pulmón", "Corazón"], correct: 2 },
+        { q: "¿Cuál es el resultado de 15 dividido entre 3?", options: ["3", "5", "6"], correct: 1 },
+        { q: "¿Qué estudia la química?", options: ["Los astros", "La materia y sus cambios", "El pasado humano"], correct: 1 },
+        { q: "¿En qué estado se encuentra el agua a temperatura ambiente?", options: ["Sólido", "Líquido", "Gaseoso"], correct: 1 },
+        { q: "¿Cuál es el polímero natural que transporta la herencia genética?", options: ["ADN", "Proteína", "Lípido"], correct: 0 },
+        { q: "¿Qué elemento químico tiene el símbolo O?", options: ["Oro", "Osmio", "Oxígeno"], correct: 2 },
+        { q: "¿Cuál es el valor aproximado de Pi?", options: ["3.14", "2.71", "1.41"], correct: 0 },
+        { q: "¿Qué instrumento se usa para medir la temperatura?", options: ["Barómetro", "Termómetro", "Voltímetro"], correct: 1 },
+        { q: "¿Cuántos huesos tiene aproximadamente el cuerpo humano adulto?", options: ["100", "206", "350"], correct: 1 },
+        { q: "¿Qué capa gaseosa rodea a la Tierra?", options: ["Atmósfera", "Litosfera", "Hidrosfera"], correct: 0 },
+        { q: "¿Cuál es la capital de la energía en la célula?", options: ["Mitocondria", "Ribosoma", "Vacuola"], correct: 0 },
+        { q: "¿Qué tipo de energía tiene un objeto en movimiento?", options: ["Potencial", "Cinética", "Térmica"], correct: 1 },
+        { q: "¿Cómo se llama el cambio de líquido a gas?", options: ["Fusión", "Evaporación", "Solidificación"], correct: 1 }
+    ],
+    veterano: [
+        { q: "¿Cuál es la segunda Ley de Newton?", options: ["F = m * a", "E = mc^2", "V = I * R"], correct: 0 },
+        { q: "¿Qué proceso celular genera gametos con n cromosomas?", options: ["Mitosis", "Meiosis", "Fisión binaria"], correct: 1 },
+        { q: "¿Cuál es el pH neutro en la escala química?", options: ["0", "7", "14"], correct: 1 },
+        { q: "¿Qué científico propuso la teoría de la relatividad general?", options: ["Isaac Newton", "Albert Einstein", "Nikola Tesla"], correct: 1 },
+        { q: "¿Cómo se denomina la tasa de cambio de la posición respecto al tiempo?", options: ["Aceleración", "Velocidad", "Inercia"], correct: 1 },
+        { q: "¿Qué enzima duplica el ADN antes de la división celular?", options: ["ADN polimerasa", "Amilasa", "Pepsina"], correct: 0 },
+        { q: "¿Cuál es la derivada de x al cuadrado?", options: ["2x", "x", "x al cubo"], correct: 0 },
+        { q: "¿Qué gas compone mayoritariamente la atmósfera terrestre?", options: ["Oxígeno", "Nitrógeno", "Argón"], correct: 1 },
+        { q: "¿Cómo se llama la unión entre dos neuronas?", options: ["Sinapsis", "Axón", "Dendrita"], correct: 0 },
+        { q: "¿Qué ley rige la conservación de la energía mecánica en sistemas aislados?", options: ["Primera Ley de la Termodinámica", "Principio de Pascal", "Ley de Ohm"], correct: 0 },
+        { q: "¿Cuál es el metal más conductor de la electricidad?", options: ["Cobre", "Plata", "Oro"], correct: 1 },
+        { q: "¿Qué orgánulo realiza la síntesis de proteínas?", options: ["Ribosoma", "Lisosoma", "Aparato de Golgi"], correct: 0 },
+        { q: "¿Cuál es la integral indefinida de 1 sobre x?", options: ["ln|x|", "x", "e^x"], correct: 0 },
+        { q: "¿Qué partícula subatómica tiene carga negativa?", options: ["Protón", "Neutrón", "Electrón"], correct: 2 },
+        { q: "¿Cómo se llama el punto donde se cruzan las asíntotas de una hipérbola?", options: ["Foco", "Centro", "Vértice"], correct: 1 },
+        { q: "¿Qué estudia la termodinámica?", options: ["El calor y el trabajo", "La luz", "Las ondas sonoras"], correct: 0 },
+        { q: "¿Cuál es el enlace químico donde se comparten electrones?", options: ["Iónico", "Covalente", "Metálico"], correct: 1 },
+        { q: "¿Qué hormona regula los niveles de glucosa en la sangre?", options: ["Insulina", "Adrenalina", "Tiroxina"], correct: 0 },
+        { q: "¿Cuál es la velocidad de la luz en el vacío aprox?", options: ["300,000 km/s", "150,000 km/s", "3,000 km/s"], correct: 0 },
+        { q: "¿Qué nombre recibe un polígono de 8 lados?", options: ["Hexágono", "Heptágono", "Octágono"], correct: 2 }
+    ],
+    experto: [
+        { q: "¿Cuál es la ecuación de campo de Einstein en relatividad general?", options: ["G_mu_nu = 8pi T_mu_nu", "F = dp/dt", "PV = nRT"], correct: 0 },
+        { q: "¿Qué describe el Principio de Incertidumbre de Heisenberg?", options: ["Posición y momento simultáneos", "Entropía universal", "Dualidad onda-partícula"], correct: 0 },
+        { q: "¿Cuál es la solución general a la ecuación diferencial y'' + y = 0?", options: ["C1 cos(x) + C2 sen(x)", "C1 e^x", "C1 x^2"], correct: 0 },
+        { q: "¿Qué orgánulo celular contiene las enzimas del ciclo de Krebs en eucariotas?", options: ["Matriz mitocondrial", "Citoplasma", "Núcleo"], correct: 0 },
+        { q: "¿Cuál es el bosón responsable de otorgar masa a las partículas elementales?", options: ["Bosón de Higgs", "Fotón", "Gluón"], correct: 0 },
+        { q: "¿Qué establece la segunda ley de la termodinámica sobre la entropía?", options: ["Siempre aumenta en sistemas aislados", "Permanece constante", "Disminuye"], correct: 0 },
+        { q: "¿Cuál es el valor del límite de (1 + 1/n)^n cuando n tiende a infinito?", options: ["e", "Pi", "0"], correct: 0 },
+        { q: "¿Qué describe la ecuación de Schrödinger en mecánica cuántica?", options: ["La evolución temporal de la función de onda", "La relatividad del tiempo", "La expansión del universo"], correct: 0 },
+        { q: "¿Cómo se llaman los puntos críticos donde la matriz Hessiana es indefinida?", options: ["Puntos de silla", "Máximos locales", "Mínimos absolutos"], correct: 0 },
+        { q: "¿Qué enzima transcribe ARN a partir de una plantilla de ADN?", options: ["ARN polimerasa", "ADN ligasa", "Helicasa"], correct: 0 },
+        { q: "¿Cuál es la constante de Planck reducida (hbar)?", options: ["h / 2pi", "h * pi", "2h"], correct: 0 },
+        { q: "¿Qué fenómeno cuántico explica que partículas estén conectadas a distancia?", options: ["Entrelazamiento cuántico", "Túnel cuántico", "Efecto fotoeléctrico"], correct: 0 },
+        { q: "¿Cuál es el teorema que relaciona la integración sobre una frontera con el volumen?", options: ["Teorema de Stokes / Divergencia", "Teorema de Pitágoras", "Teorema del Residuo"], correct: 0 },
+        { q: "¿Qué tipo de enlace estabiliza la estructura secundaria del ADN?", options: ["Puentes de hidrógeno", "Enlaces covalentes fuertes", "Fuerzas de Van der Waals"], correct: 0 },
+        { q: "¿Cuál es la estructura algebraica que cumple axiomas de grupo, anillo y campo?", options: ["Espacio vectorial / Campo", "Monoides", "Ideales"], correct: 0 },
+        { q: "¿Qué describe la constante cosmológica en las ecuaciones de Einstein?", options: ["La energía oscura del vacío", "La masa solar", "La constante gravitacional"], correct: 0 },
+        { q: "¿Qué biomolécula cataliza la mayoría de reacciones metabólicas celulares?", options: ["Proteínas (Enzimas)", "Ácidos nucleicos", "Lípidos"], correct: 0 },
+        { q: "¿Cuál es la dimensión de un espacio vectorial de matrices cuadradas de 3x3?", options: ["9", "3", "6"], correct: 0 },
+        { q: "¿Qué partícula mediadora rige la fuerza nuclear fuerte?", options: ["Gluón", "Bosón W", "Fotón"], correct: 0 },
+        { q: "¿Cómo se llama la transformación integral que convierte ecuaciones diferenciales en algebraicas?", options: ["Transformada de Laplace", "Transformada de Fourier", "Transformación lineal"], correct: 0 }
+    ]
+};
 
 function renderIQTestView() {
     const view = document.getElementById('view-test');
     if (!view) return;
     
-    const levels = [
-        { name: 'Nivel Principiante', icon: '🌱', desc: 'Desafíos lógicos iniciales para activar el pensamiento crítico.', bg: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=600&auto=format&fit=crop' },
-        { name: 'Nivel Veterano', icon: '⚡', desc: 'Problemas analíticos de razonamiento abstracto intermedio.', bg: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop' },
-        { name: 'Nivel Experto', icon: '🔥', desc: 'Situaciones complejas de deducción lógica y científica.', bg: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?q=80&w=600&auto=format&fit=crop' },
-        { name: 'Nivel Sabio', icon: '🦉', desc: 'Pruebas maestras de máxima exigencia cognitiva.', bg: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=600&auto=format&fit=crop' }
-    ];
-
     view.innerHTML = `
-        <div class="max-w-4xl mx-auto space-y-6">
+        <div class="max-w-2xl mx-auto space-y-6">
             <div class="text-center space-y-2">
-                <h2 class="text-2xl font-bold text-white">📝 Test de IQ y Razonamiento Socrático</h2>
-                <p class="text-xs text-slate-400">Selecciona un nivel para poner a prueba tu pensamiento crítico.</p>
+                <h2 class="text-2xl font-bold text-white">📝 Test de IQ Académico</h2>
+                <p class="text-xs text-slate-400">Selecciona el nivel de dificultad para evaluar tus conocimientos.</p>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                ${levels.map((lvl, idx) => `
-                    <div class="relative rounded-3xl overflow-hidden p-6 space-y-3 hover:scale-[1.02] transition-all cursor-pointer border border-white/20 shadow-lg group" onclick="startIQLevelTest(${idx + 1})" style="background: linear-gradient(rgba(10,15,30,0.75), rgba(10,15,30,0.9)), url('${lvl.bg}'); background-size: cover; background-position: center;">
-                        <div class="text-3xl">${lvl.icon}</div>
-                        <h3 class="font-bold text-sm text-white group-hover:text-blue-300 transition-colors">${lvl.name}</h3>
-                        <p class="text-xs text-slate-300 leading-relaxed">${lvl.desc}</p>
-                        <div class="text-[11px] font-bold text-blue-400 pt-2">Comenzar test ➔</div>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <button onclick="startIQTest('principiante'); playSound('click');" class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2 hover:bg-white/15 cursor-pointer transition-all border border-white/10">
+                    <span class="text-2xl">🌱</span>
+                    <div class="font-bold text-sm text-white">Principiante</div>
+                    <div class="text-[10px] text-slate-400">20 preguntas básicas</div>
+                </button>
+                <button onclick="startIQTest('veterano'); playSound('click');" class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2 hover:bg-white/15 cursor-pointer transition-all border border-white/10">
+                    <span class="text-2xl">⚡</span>
+                    <div class="font-bold text-sm text-white">Veterano</div>
+                    <div class="text-[10px] text-slate-400">20 preguntas intermedias</div>
+                </button>
+                <button onclick="startIQTest('experto'); playSound('click');" class="ultra-glass-panel p-6 rounded-3xl text-center space-y-2 hover:bg-white/15 cursor-pointer transition-all border border-white/10">
+                    <span class="text-2xl">🧠</span>
+                    <div class="font-bold text-sm text-white">Experto</div>
+                    <div class="text-[10px] text-slate-400">20 preguntas avanzadas</div>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function startIQTest(level) {
+    currentTestLevel = level;
+    currentTestQuestion = 0;
+    testScore = 0;
+    showTestQuestion();
+}
+
+function showTestQuestion() {
+    clearInterval(testTimer);
+    const view = document.getElementById('view-test');
+    if (!view) return;
+    
+    const questions = testBanks[currentTestLevel];
+    if (currentTestQuestion >= questions.length) {
+        view.innerHTML = `
+            <div class="max-w-xl mx-auto ultra-glass-panel p-8 rounded-3xl text-center space-y-4">
+                <h3 class="text-xl font-bold text-white">🎉 ¡Test de IQ (${currentTestLevel.toUpperCase()}) Finalizado!</h3>
+                <p class="text-xs text-slate-300">Has acertado ${testScore} de ${questions.length} preguntas.</p>
+                <button onclick="renderIQTestView()" class="px-6 py-3 rounded-2xl bg-blue-600 text-white font-bold text-xs cursor-pointer">Elegir Otro Nivel</button>
+            </div>
+        `;
+        return;
+    }
+
+    timeLeft = 30;
+    const item = questions[currentTestQuestion];
+    view.innerHTML = `
+        <div class="max-w-2xl mx-auto ultra-glass-panel p-8 rounded-3xl space-y-6">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-blue-400">Nivel: ${currentTestLevel.toUpperCase()} | Pregunta ${currentTestQuestion + 1} de ${questions.length}</span>
+                <span id="test-timer-badge" class="px-3 py-1 bg-red-500/20 text-red-300 rounded-full text-xs font-bold">⏱️ 30s</span>
+            </div>
+            <h3 class="text-sm font-bold text-white">${item.q}</h3>
+            <div class="space-y-2">
+                ${item.options.map((opt, idx) => `
+                    <button onclick="answerTestQuestion(${idx})" class="w-full p-3.5 rounded-2xl bg-white/5 hover:bg-white/15 text-left text-xs text-slate-200 cursor-pointer transition-all">${opt}</button>
                 `).join('')}
             </div>
         </div>
     `;
+
+    testTimer = setInterval(() => {
+        timeLeft--;
+        const badge = document.getElementById('test-timer-badge');
+        if (badge) badge.textContent = `⏱️ ${timeLeft}s`;
+        if (timeLeft <= 0) {
+            clearInterval(testTimer);
+            currentTestQuestion++;
+            showTestQuestion();
+        }
+    }, 1000);
 }
 
-function startIQLevelTest(levelNum) {
-    alert(`Iniciando Test de IQ - Nivel ${['Principiante', 'Veterano', 'Experto', 'Sabio'][levelNum - 1]}`);
-    switchTab('chat');
-    sendQuickPrompt(`Ponme un desafío del test de IQ nivel ${levelNum}`);
-}
-
-function renderWeatherView() {
-    const view = document.getElementById('view-weather');
-    if (!view) return;
-    
-    view.innerHTML = `
-        <div class="max-w-3xl mx-auto space-y-6">
-            <div>
-                <h2 class="text-2xl font-bold text-white">🌤️ Clima y Pronóstico de Estudio</h2>
-                <p class="text-xs text-slate-400">Condiciones meteorológicas actuales para optimizar tu jornada de aprendizaje.</p>
-            </div>
-            <div class="ultra-glass-panel p-8 rounded-3xl space-y-6">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div>
-                        <div class="text-3xl font-extrabold text-white">22°C</div>
-                        <div class="text-xs text-blue-400 font-bold mt-1">Parcialmente Nublado 🌥️</div>
-                        <div class="text-[11px] text-slate-400 mt-1">Clima ideal para concentración óptima</div>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-xs text-slate-300">Humedad: 65%</div>
-                        <div class="text-xs text-slate-300">Viento: 12 km/h</div>
-                        <div class="text-xs text-slate-300">Índice UV: Bajo</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderLibraryView() {
-    const view = document.getElementById('library-content');
-    if (!view) return;
-    
-    const libraryItems = [
-        { title: 'Estequiometría y Leyes Ponderales', category: 'Química', summary: 'Relación cuantitativa entre reactivos y productos en una reacción química.' },
-        { title: 'Ciclo de Krebs y Fosforilación Oxidativa', category: 'Biología', summary: 'Ruta metabólica central en la respiración celular aeróbica.' },
-        { title: 'Leyes de Newton y Dinámica', category: 'Física', summary: 'Principios que relacionan la fuerza con la aceleración y el movimiento.' }
-    ];
-    
-    view.innerHTML = libraryItems.map(item => `
-        <div class="ultra-glass-panel p-6 rounded-3xl space-y-2">
-            <span class="text-[10px] uppercase font-bold text-blue-400">${item.category}</span>
-            <h3 class="font-bold text-sm text-white">${item.title}</h3>
-            <p class="text-xs text-slate-300">${item.summary}</p>
-        </div>
-    `).join('');
+function answerTestQuestion(selectedIdx) {
+    clearInterval(testTimer);
+    const questions = testBanks[currentTestLevel];
+    if (selectedIdx === questions[currentTestQuestion].correct) testScore++;
+    currentTestQuestion++;
+    showTestQuestion();
 }
 
 let mediaStream = null;
-async function openCameraModal() {
-    const modal = document.getElementById('camera-modal');
-    const video = document.getElementById('camera-video');
-    if (modal) modal.classList.remove('hidden');
-    try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        if (video) video.srcObject = mediaStream;
-    } catch (e) {
-        alert('No se pudo acceder a la cámara web.');
-    }
+function openCameraModal() {
+    document.getElementById('camera-modal')?.classList.remove('hidden');
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        mediaStream = stream;
+        document.getElementById('camera-video').srcObject = stream;
+    }).catch(() => alert('No se pudo acceder a la cámara.'));
 }
 
 function closeCameraModal() {
-    const modal = document.getElementById('camera-modal');
-    if (modal) modal.classList.add('hidden');
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
+    document.getElementById('camera-modal')?.classList.add('hidden');
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
 }
 
 function capturePhotoFromCamera() {
-    alert('Foto capturada con éxito. Novic la analizará en la próxima respuesta.');
     closeCameraModal();
-}
-
-function handleFileSelected(event) {
-    const file = event.target.files[0];
-    if (file) {
-        alert(`Archivo "${file.name}" cargado correctamente en Novic.`);
-        togglePlusMenu();
-    }
-}
-
-function toggleSpeechRecognition() {
-    const wave = document.getElementById('mic-wave-animation');
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('El reconocimiento de voz no está soportado en este navegador.');
-        return;
-    }
-    
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    
-    recognition.onstart = () => { if (wave) wave.classList.remove('hidden'); };
-    recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        const input = document.getElementById('user-input');
-        if (input) input.value = transcript;
-    };
-    recognition.onerror = () => { if (wave) wave.classList.add('hidden'); };
-    recognition.onend = () => { if (wave) wave.classList.add('hidden'); };
-    
-    recognition.start();
-}
-
-function openSettings() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('show');
-    }
-}
-
-function closeSettings() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) {
-        modal.classList.remove('show');
-        modal.classList.add('hidden');
-    }
-}
-
-function selectGoogleVoice(index) {
-    selectedVoiceIndex = index;
-    for (let i = 0; i < 4; i++) {
-        const btn = document.getElementById(`voice-option-${i}`);
-        if (btn) {
-            if (i === index) btn.className = 'p-3 rounded-2xl bg-blue-600 text-white font-bold text-xs cursor-pointer shadow-md';
-            else btn.className = 'p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-300 text-xs cursor-pointer';
-        }
-    }
-    playSound('click');
-}
-
-function applyPresetTheme(color) {
-    document.documentElement.style.setProperty('--theme-color', color);
-    playSound('click');
-}
-
-function setCustomThemeColor(color) {
-    document.documentElement.style.setProperty('--theme-color', color);
-}
-
-function setThemeCategory(category) {
-    currentThemeCategory = category;
-    const gallery = themeGalleries[category];
-    if (gallery && gallery.length > 0) {
-        const randomImg = gallery[Math.floor(Math.random() * gallery.length)];
-        const bgLayer = document.getElementById('chat-bg-layer');
-        if (bgLayer) bgLayer.style.backgroundImage = `url('${randomImg}')`;
-    }
-    playSound('click');
-}
-
-function handleCustomBackgroundUpload(event) {
-    const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const bgLayer = document.getElementById('chat-bg-layer');
-            if (bgLayer) bgLayer.style.backgroundImage = `url('${e.target.result}')`;
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-function playSound(type) {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        
-        if (type === 'click') {
-            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.08);
-            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.08);
-        }
-    } catch (e) {}
+    appendMessage('📷 [Foto capturada desde la cámara web]', 'user');
+    setTimeout(() => callGeminiApi("He capturado una foto. Analízala y guíame."), 600);
 }
